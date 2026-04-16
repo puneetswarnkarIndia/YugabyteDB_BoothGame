@@ -88,6 +88,15 @@ html,body{width:100%;min-height:100vh;font-family:-apple-system,BlinkMacSystemFo
 .lb-you-badge{font-size:10px;background:rgba(29,184,122,0.15);color:var(--yuga-teal);padding:1px 7px;border-radius:20px;margin-left:6px;font-weight:600}
 .lb-score{font-weight:700;color:var(--yuga-teal)}
 @media(max-width:480px){.options-grid{grid-template-columns:1fr}.game-title{font-size:26px}}
+
+/* ── Reading countdown timer ── */
+.read-timer{display:flex;align-items:center;gap:12px;max-width:560px;width:100%;margin-bottom:10px;background:rgba(29,184,122,0.06);border:1px solid rgba(29,184,122,0.2);border-radius:10px;padding:10px 16px}
+.read-timer-ring{flex-shrink:0}
+.read-timer-ring circle{transition:stroke-dashoffset 1s linear;transform-origin:center;transform:rotate(-90deg)}
+.read-timer-text{flex:1}
+.read-timer-label{font-size:12px;font-weight:600;color:var(--yuga-teal);margin-bottom:2px}
+.read-timer-sub{font-size:11px;color:var(--yuga-muted)}
+.btn-next.locked{opacity:0.35;cursor:not-allowed;background:#444;color:#888}
 </style>
 </head>
 <body>
@@ -128,7 +137,21 @@ html,body{width:100%;min-height:100vh;font-family:-apple-system,BlinkMacSystemFo
   <div class="multiplier" id="multiplier-label"></div>
   <div class="options-grid" id="options-grid"></div>
   <div id="feedback-area"></div>
-  <button class="btn-next" id="next-btn">Next →</button>
+  <div class="read-timer" id="read-timer" style="display:none">
+    <div class="read-timer-ring">
+      <svg width="44" height="44" viewBox="0 0 44 44">
+        <circle cx="22" cy="22" r="18" fill="none" stroke="#2a2a2a" stroke-width="4"/>
+        <circle id="ring-progress" cx="22" cy="22" r="18" fill="none" stroke="#1DB87A" stroke-width="4"
+          stroke-dasharray="113" stroke-dashoffset="0" stroke-linecap="round"/>
+        <text id="ring-count" x="22" y="27" text-anchor="middle" font-size="13" font-weight="700" fill="#1DB87A">10</text>
+      </svg>
+    </div>
+    <div class="read-timer-text">
+      <div class="read-timer-label">Read the insight above ☝️</div>
+      <div class="read-timer-sub" id="read-timer-sub">Next question unlocks in 5 seconds…</div>
+    </div>
+  </div>
+  <button class="btn-next locked" id="next-btn">Next →</button>
 </div>
 
 <div class="screen" id="screen-result">
@@ -407,6 +430,7 @@ function startGame(){
 
 function loadQuestion(){
   answered=false;
+  clearInterval(readTimerInt);
   const q=questions[currentQ];
   document.getElementById("q-label").textContent="Q"+(currentQ+1)+" of 6";
   document.getElementById("s-tag").textContent=q.tag;
@@ -414,6 +438,13 @@ function loadQuestion(){
   document.getElementById("s-desc").textContent=q.desc;
   document.getElementById("feedback-area").innerHTML="";
   document.getElementById("next-btn").style.display="none";
+  document.getElementById("next-btn").disabled=false;
+  document.getElementById("next-btn").classList.remove("locked");
+  document.getElementById("read-timer").style.display="none";
+  var ring=document.getElementById("ring-progress");
+  if(ring){ring.style.stroke="#1DB87A";ring.style.strokeDashoffset="0";}
+  var rc=document.getElementById("ring-count");
+  if(rc){rc.style.fill="#1DB87A";rc.textContent="10";}
   document.getElementById("multiplier-label").textContent="⚡ Faster answer = more points";
   const grid=document.getElementById("options-grid");
   grid.innerHTML="";
@@ -447,8 +478,8 @@ function updateTimer(){
 function timeout(){
   answered=true;disableOpts();
   showFeedback(false,questions[currentQ]);
-  document.getElementById("next-btn").style.display="block";
   document.getElementById("multiplier-label").textContent="⏰ Time's up!";
+  showNextBtn();
 }
 
 function selectAnswer(idx){
@@ -471,7 +502,54 @@ function selectAnswer(idx){
     else if(i===idx&&!ok){b.classList.add("wrong");b.querySelector(".opt-ltr").style.color="#D85A30";}
   });
   showFeedback(ok,q);
-  document.getElementById("next-btn").style.display="block";
+  showNextBtn();
+}
+
+var readTimerInt=null;
+function showNextBtn(){
+  const btn=document.getElementById("next-btn");
+  const rt=document.getElementById("read-timer");
+  const ring=document.getElementById("ring-progress");
+  const ringCount=document.getElementById("ring-count");
+  const sub=document.getElementById("read-timer-sub");
+  const CIRCUMFERENCE=113; // 2 * pi * 18
+  const DELAY=10;
+  var remaining=DELAY;
+
+  btn.style.display="block";
+  btn.classList.add("locked");
+  btn.disabled=true;
+  rt.style.display="flex";
+
+  // Scroll feedback into view smoothly
+  setTimeout(function(){
+    var fb=document.getElementById("feedback-area");
+    if(fb)fb.scrollIntoView({behavior:"smooth",block:"nearest"});
+  },100);
+
+  ringCount.textContent=remaining;
+  sub.textContent="Next question unlocks in "+remaining+" second"+(remaining!==1?"s":"")+"…";
+  ring.style.strokeDashoffset="0";
+
+  clearInterval(readTimerInt);
+  readTimerInt=setInterval(function(){
+    remaining--;
+    ringCount.textContent=remaining;
+    sub.textContent=remaining>0
+      ? "Next question unlocks in "+remaining+" second"+(remaining!==1?"s":"")+"…"
+      : "Ready! Tap Next →";
+    // Drain the ring (offset goes from 0 → CIRCUMFERENCE as time passes)
+    var offset=Math.round(CIRCUMFERENCE*(1-(remaining/DELAY)));
+    ring.style.strokeDashoffset=offset;
+    if(remaining<=0){
+      clearInterval(readTimerInt);
+      btn.classList.remove("locked");
+      btn.disabled=false;
+      ring.style.stroke="#FFD700";
+      ringCount.style.fill="#FFD700";
+      ringCount.textContent="✓";
+    }
+  },1000);
 }
 
 function disableOpts(){
